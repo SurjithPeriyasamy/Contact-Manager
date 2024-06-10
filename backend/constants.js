@@ -5,3 +5,9 @@ exports.constants = {
   NOT_FOUND: 404,
   SERVER_ERROR: 500,
 };
+
+exports.getError = (message, statusCode) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
