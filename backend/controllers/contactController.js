@@ -3,13 +3,16 @@ const { getError } = require("../constants");
 
 // @desc Get all contacts
 // @route GET /api/contacts
-// @access public
+// @access private
 const getAllContacts = async (req, res, next) => {
   try {
-    const { skip, limit } = req.query;
-    const allContacts = await Contact.find({});
+    // const { skip, limit } = req.query;
+    const allContacts = await Contact.find({ user_id: req.user.id });
+    // .populate(
+    //   "user_id"
+    // );
 
-    res.status(200).json({ data: allContacts, limit, skip });
+    res.status(200).json({ data: allContacts });
   } catch (error) {
     next(getError(error.message, 500));
     // res.status(500).send({ message: error.message });
@@ -18,7 +21,7 @@ const getAllContacts = async (req, res, next) => {
 
 // @desc Create a new contact
 // @route POST /api/contacts
-// @access public
+// @access private
 const createContact = async (req, res, next) => {
   try {
     const { name, email, phone } = req.body;
@@ -35,7 +38,10 @@ const createContact = async (req, res, next) => {
       return next(getError("Contact already exists", 400));
       // return res.status(400).json({ message: "Contact already exists" });
     }
-    const newContact = await Contact.create(req.body);
+    const newContact = await Contact.create({
+      user_id: req.user.id,
+      ...req.body,
+    });
 
     res.status(201).json({ message: "Successfully created", data: newContact });
   } catch (error) {
@@ -45,7 +51,7 @@ const createContact = async (req, res, next) => {
 
 // @desc Get a contact
 // @route GET /api/contacts/:id
-// @access public
+// @access private
 const getContact = async (req, res) => {
   try {
     const contact = await Contact.findById(req.params.id);
@@ -58,8 +64,8 @@ const getContact = async (req, res) => {
 
 // @desc Update a contact
 // @route PUT /api/contacts/:id
-// @access public
-const updateContact = async (req, res) => {
+// @access private
+const updateContact = async (req, res, next) => {
   try {
     const { name, email, phone } = req.body;
     if (!(name || email || phone)) {
@@ -67,8 +73,19 @@ const updateContact = async (req, res) => {
       // return res.status(400).json({ message: "all fields are required" });
     }
     const { id } = req.params;
-    await Contact.findByIdAndUpdate(id, req.body);
-    const updatedContact = await Contact.findOne({ _id: id });
+    const contact = await Contact.findOne({ _id: id });
+    if (contact.user_id.toString() !== req.user.id) {
+      return next(
+        getError(
+          "user doesn't have permission to update the other contacts",
+          403
+        )
+      );
+    }
+    const updatedContact = await Contact.findByIdAndUpdate(id, req.body, {
+      new: true,
+    });
+
     res
       .status(200)
       .json({ message: "Contact updated successfully", data: updatedContact });
@@ -80,11 +97,18 @@ const updateContact = async (req, res) => {
 
 // @desc Delete a contact
 // @route DELETE /api/contacts/:id
-// @access public
+// @access private
 const deleteContact = async (req, res, next) => {
   try {
-    const contact = await Contact.findByIdAndDelete(req.params.id, req.body);
-    res.status(200).json({ data: contact });
+    const contact = await Contact.findById(req.params.id);
+    if (contact.user_id.toString() !== req.user.id) {
+      return next(getError("User can't delete contacts from other users", 403));
+    }
+    const deletedContact = await Contact.findByIdAndDelete(
+      req.params.id,
+      req.body
+    );
+    res.status(200).json({ data: deletedContact });
   } catch (error) {
     next(getError(error.message, 500));
     // res.status(500).json({ message: error.message });
